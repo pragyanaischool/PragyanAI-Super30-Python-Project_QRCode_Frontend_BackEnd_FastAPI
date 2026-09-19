@@ -30,7 +30,7 @@
 // ------------------------------------------------------------
 
 const API_URL =
-    "https://pragyanai-super30-python-qrcode.netlify.app/";
+    "https://pragyanai-super30-python-project-qrcode.onrender.com/";
 
 
 // ============================================================
