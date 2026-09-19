@@ -5,7 +5,7 @@
 
     "cors_origins": [
         "*",
-        "https://pragyanai-super30-python-qrcode.netlify.app/"
+        "https://pragyanai-super30-python-qrcode.netlify.app"
     ],
 
     "max_upload_size_mb": 5
