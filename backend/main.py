@@ -1,46 +1,145 @@
 import io
 import json
+from pathlib import Path
 
 import qrcode
 import zxingcpp
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from fastapi import (
     FastAPI,
     File,
+    HTTPException,
     UploadFile
 )
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from fastapi.responses import (
-    StreamingResponse
-)
+from fastapi.responses import StreamingResponse
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+# ============================================================
+# APPLICATION PATHS
+# ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent
+
+CONFIG_FILE = BASE_DIR / "config.json"
+
+
+# ============================================================
+# APPLICATION DEFAULT CONFIGURATION
+# ============================================================
+
+DEFAULT_CONFIG = {
+
+    "app_name":
+        "QR Code Generator & Decoder",
+
+    "version":
+        "1.0.0",
+
+    "description":
+        "QR Code Generator and Decoder using "
+        "FastAPI, Pillow and ZXing-C++",
+
+    "cors_origins": [
+
+        "*"
+    ],
+
+    "max_upload_size_mb":
+        5
+}
 
 
 # ============================================================
 # LOAD CONFIGURATION
 # ============================================================
 
-try:
+def load_config():
 
-    with open(
-        "backend/config.json",
-        "r",
-        encoding="utf-8"
-    ) as file:
+    try:
 
-        config = json.load(file)
+        with open(
+            CONFIG_FILE,
+            "r",
+            encoding="utf-8"
+        ) as file:
 
-except FileNotFoundError:
+            loaded_config = json.load(file)
 
-    config = {
-        "app_name": "QR Code Generator & Decoder",
-        "version": "1.0.0"
-    }
+            # Merge loaded configuration
+            # with default configuration
+
+            config = {
+                **DEFAULT_CONFIG,
+                **loaded_config
+            }
+
+            return config
+
+    except FileNotFoundError:
+
+        print(
+            "WARNING: config.json not found. "
+            "Using default configuration."
+        )
+
+        return DEFAULT_CONFIG
+
+    except json.JSONDecodeError:
+
+        print(
+            "WARNING: Invalid config.json. "
+            "Using default configuration."
+        )
+
+        return DEFAULT_CONFIG
+
+
+# Load configuration
+
+config = load_config()
+
+
+# ============================================================
+# APPLICATION SETTINGS
+# ============================================================
+
+APP_NAME = config.get(
+    "app_name",
+    DEFAULT_CONFIG["app_name"]
+)
+
+APP_VERSION = config.get(
+    "version",
+    DEFAULT_CONFIG["version"]
+)
+
+APP_DESCRIPTION = config.get(
+    "description",
+    DEFAULT_CONFIG["description"]
+)
+
+CORS_ORIGINS = config.get(
+    "cors_origins",
+    ["*"]
+)
+
+MAX_UPLOAD_SIZE_MB = config.get(
+    "max_upload_size_mb",
+    5
+)
+
+MAX_UPLOAD_SIZE = (
+    MAX_UPLOAD_SIZE_MB
+    * 1024
+    * 1024
+)
 
 
 # ============================================================
@@ -49,20 +148,15 @@ except FileNotFoundError:
 
 app = FastAPI(
 
-    title=config.get(
-        "app_name",
-        "QR Code Generator & Decoder"
-    ),
+    title=APP_NAME,
 
-    description=(
-        "QR Code Generator and Decoder "
-        "using FastAPI, Pillow and ZXing-C++"
-    ),
+    description=APP_DESCRIPTION,
 
-    version=config.get(
-        "version",
-        "1.0.0"
-    )
+    version=APP_VERSION,
+
+    docs_url="/docs",
+
+    redoc_url="/redoc"
 )
 
 
@@ -74,13 +168,18 @@ app.add_middleware(
 
     CORSMiddleware,
 
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
 
-    allow_credentials=True,
+    allow_credentials=False,
 
-    allow_methods=["*"],
+    allow_methods=[
+        "GET",
+        "POST"
+    ],
 
-    allow_headers=["*"]
+    allow_headers=[
+        "Content-Type"
+    ]
 )
 
 
@@ -90,7 +189,17 @@ app.add_middleware(
 
 class QRRequest(BaseModel):
 
-    data: str
+    data: str = Field(
+
+        ...,
+
+        min_length=1,
+
+        max_length=5000,
+
+        description=
+            "Text, URL or information to encode"
+    )
 
 
 # ============================================================
@@ -107,11 +216,14 @@ def root():
         "message":
             "QR Code Generator & Decoder API is running",
 
+        "application":
+            APP_NAME,
+
         "version":
-            config.get(
-                "version",
-                "1.0.0"
-            ),
+            APP_VERSION,
+
+        "status":
+            "online",
 
         "documentation": {
 
@@ -131,8 +243,24 @@ def root():
                 "POST /decode",
 
             "health":
-                "GET /health"
-        }
+                "GET /health",
+
+            "info":
+                "GET /info"
+        },
+
+        "technologies": [
+
+            "Python",
+
+            "FastAPI",
+
+            "QRCode",
+
+            "Pillow",
+
+            "ZXing-C++"
+        ]
     }
 
 
@@ -149,8 +277,26 @@ def health():
 
         "status": "healthy",
 
-        "message":
-            "QR API is running"
+        "service":
+            "QR Code API",
+
+        "version":
+            APP_VERSION,
+
+        "components": {
+
+            "fastapi":
+                "running",
+
+            "qrcode":
+                "available",
+
+            "pillow":
+                "available",
+
+            "zxing_cpp":
+                "available"
+        }
     }
 
 
@@ -160,7 +306,9 @@ def health():
 
 @app.post("/generate")
 def generate_qr(
+
     request: QRRequest
+
 ):
 
     # --------------------------------------------------------
@@ -172,13 +320,13 @@ def generate_qr(
 
     if not data:
 
-        return {
+        raise HTTPException(
 
-            "success": False,
+            status_code=400,
 
-            "message":
+            detail=
                 "URL or information is required."
-        }
+        )
 
 
     try:
@@ -189,7 +337,7 @@ def generate_qr(
 
         qr = qrcode.QRCode(
 
-            version=1,
+            version=None,
 
             error_correction=
                 qrcode.constants.ERROR_CORRECT_H,
@@ -212,6 +360,7 @@ def generate_qr(
         # ----------------------------------------------------
 
         qr.make(
+
             fit=True
         )
 
@@ -260,20 +409,21 @@ def generate_qr(
             headers={
 
                 "Content-Disposition":
-                    "inline; filename=generated_qr_code.png"
+                    "inline; "
+                    "filename=generated_qr_code.png"
             }
         )
 
 
     except Exception as error:
 
-        return {
+        raise HTTPException(
 
-            "success": False,
+            status_code=500,
 
-            "message":
+            detail=
                 f"QR generation failed: {str(error)}"
-        }
+        )
 
 
 # ============================================================
@@ -284,6 +434,7 @@ def generate_qr(
 async def decode_qr(
 
     file: UploadFile = File(...)
+
 ):
 
     try:
@@ -294,13 +445,45 @@ async def decode_qr(
 
         if not file.filename:
 
-            return {
+            raise HTTPException(
 
-                "success": False,
+                status_code=400,
 
-                "message":
+                detail=
                     "No file selected."
-            }
+            )
+
+
+        # ----------------------------------------------------
+        # Validate content type
+        # ----------------------------------------------------
+
+        allowed_types = {
+
+            "image/png",
+
+            "image/jpeg",
+
+            "image/jpg",
+
+            "image/webp",
+
+            "image/bmp"
+        }
+
+
+        if file.content_type not in allowed_types:
+
+            raise HTTPException(
+
+                status_code=400,
+
+                detail=(
+                    "Unsupported image format. "
+                    "Please upload PNG, JPG, JPEG, "
+                    "WEBP or BMP."
+                )
+            )
 
 
         # ----------------------------------------------------
@@ -311,14 +494,61 @@ async def decode_qr(
 
 
         # ----------------------------------------------------
+        # Validate empty file
+        # ----------------------------------------------------
+
+        if not contents:
+
+            raise HTTPException(
+
+                status_code=400,
+
+                detail=
+                    "Uploaded file is empty."
+            )
+
+
+        # ----------------------------------------------------
+        # Validate file size
+        # ----------------------------------------------------
+
+        if len(contents) > MAX_UPLOAD_SIZE:
+
+            raise HTTPException(
+
+                status_code=413,
+
+                detail=(
+                    f"File size exceeds the maximum "
+                    f"allowed size of "
+                    f"{MAX_UPLOAD_SIZE_MB} MB."
+                )
+            )
+
+
+        # ----------------------------------------------------
         # Open image using Pillow
         # ----------------------------------------------------
 
-        image = Image.open(
+        try:
 
-            io.BytesIO(contents)
+            image = Image.open(
 
-        ).convert("RGB")
+                io.BytesIO(contents)
+            )
+
+            image = image.convert("RGB")
+
+
+        except UnidentifiedImageError:
+
+            raise HTTPException(
+
+                status_code=400,
+
+                detail=
+                    "Uploaded file is not a valid image."
+            )
 
 
         # ----------------------------------------------------
@@ -341,41 +571,99 @@ async def decode_qr(
 
                 "success": False,
 
+                "data": None,
+
+                "filename":
+                    file.filename,
+
                 "message":
                     "No QR Code detected in the image."
             }
 
 
         # ----------------------------------------------------
-        # Get decoded information
+        # Extract decoded results
         # ----------------------------------------------------
 
-        decoded_data = results[0].text
+        decoded_results = []
+
+
+        for result in results:
+
+            if result.text:
+
+                decoded_results.append({
+
+                    "text":
+                        result.text,
+
+                    "format":
+                        str(result.format),
+
+                    "type":
+                        str(result.content_type)
+                })
 
 
         # ----------------------------------------------------
-        # Return JSON response
+        # No readable data
+        # ----------------------------------------------------
+
+        if not decoded_results:
+
+            return {
+
+                "success": False,
+
+                "data": None,
+
+                "filename":
+                    file.filename,
+
+                "message":
+                    "QR code detected, but no readable data found."
+            }
+
+
+        # ----------------------------------------------------
+        # Return decoded information
         # ----------------------------------------------------
 
         return {
 
             "success": True,
 
-            "data": decoded_data,
+            "data":
+                decoded_results[0]["text"],
 
-            "filename": file.filename
+            "filename":
+                file.filename,
+
+            "count":
+                len(decoded_results),
+
+            "results":
+                decoded_results,
+
+            "message":
+                "QR code decoded successfully."
         }
+
+
+    except HTTPException:
+
+        raise
 
 
     except Exception as error:
 
-        return {
+        raise HTTPException(
 
-            "success": False,
+            status_code=500,
 
-            "message":
+            detail=
                 f"QR decoding failed: {str(error)}"
-        }
+        )
 
 
 # ============================================================
@@ -388,29 +676,75 @@ def application_info():
     return {
 
         "application":
-            config.get(
-                "app_name",
-                "QR Code Generator & Decoder"
-            ),
+            APP_NAME,
 
         "version":
-            config.get(
-                "version",
-                "1.0.0"
-            ),
+            APP_VERSION,
 
-        "technologies": [
+        "description":
+            APP_DESCRIPTION,
 
-            "Python",
+        "architecture": {
 
-            "FastAPI",
+            "frontend":
+                "HTML + CSS + JavaScript",
 
-            "QRCode",
+            "hosting_frontend":
+                "Netlify",
 
-            "Pillow",
+            "backend":
+                "FastAPI",
 
-            "ZXing-C++"
-        ],
+            "api_style":
+                "REST API",
 
-        "opencv_used": False
+            "data_format":
+                "JSON",
+
+            "image_format":
+                "PNG"
+        },
+
+        "technologies": {
+
+            "language":
+                "Python",
+
+            "api_framework":
+                "FastAPI",
+
+            "qr_generation":
+                "QRCode",
+
+            "image_processing":
+                "Pillow",
+
+            "qr_decoding":
+                "ZXing-C++"
+        },
+
+        "opencv_used":
+            False
     }
+
+
+# ============================================================
+# RUN APPLICATION LOCALLY
+# ============================================================
+
+if __name__ == "__main__":
+
+    import uvicorn
+
+
+    uvicorn.run(
+
+        "main:app",
+
+        host="0.0.0.0",
+
+        port=8000,
+
+        reload=True
+    )
+    
