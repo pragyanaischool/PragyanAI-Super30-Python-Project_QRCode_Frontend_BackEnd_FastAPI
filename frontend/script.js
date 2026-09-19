@@ -29,10 +29,9 @@
 //
 // ------------------------------------------------------------
 
-const API_URL =
-    "https://pragyanai-super30-python-project-qrcode.onrender.com";
+const API_URL ="https://pragyanai-super30-python-project-qrcode.onrender.com";
 
-
+console.log("QR API URL:", API_URL);
 // ============================================================
 // DOM ELEMENTS
 // ============================================================
