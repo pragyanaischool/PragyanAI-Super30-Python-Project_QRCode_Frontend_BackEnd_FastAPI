@@ -1,0 +1,55 @@
+{
+    "project": {
+        "name": "PragyanAI QR Code Generator & Decoder",
+        "version": "1.0.0",
+        "description": "QR Code Generator and Decoder using Python and FastAPI"
+    },
+
+    "student": {
+        "name": "Super 30 Student",
+        "program": "PragyanAI Super 30",
+        "project_type": "Python Project"
+    },
+
+    "sample_qr_data": [
+        {
+            "id": 1,
+            "type": "URL",
+            "data": "https://pragyanai.com"
+        },
+        {
+            "id": 2,
+            "type": "Text",
+            "data": "Welcome to PragyanAI"
+        },
+        {
+            "id": 3,
+            "type": "Email",
+            "data": "mailto:info@example.com"
+        },
+        {
+            "id": 4,
+            "type": "Phone",
+            "data": "tel:+919999999999"
+        },
+        {
+            "id": 5,
+            "type": "Information",
+            "data": "Python + FastAPI + QRCode + Pillow + ZXing-C++"
+        }
+    ],
+
+    "technologies": [
+        "Python",
+        "FastAPI",
+        "Streamlit",
+        "HTML",
+        "CSS",
+        "JavaScript",
+        "QRCode",
+        "Pillow",
+        "ZXing-C++"
+    ],
+
+    "opencv_used": false
+}
